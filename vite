@@ -1,0 +1,7 @@
+// vite.config.js
+import { defineConfig } from 'vite'
+
+export default defineConfig({
+  // 不要設定 root，讓它預設從當前目錄找
+})
+
