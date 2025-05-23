@@ -1,0 +1,163 @@
+
+<template>
+  <div>
+    <h1>Hello, Vue 3!</h1>
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted } from 'vue'
+
+/** 設定 API key 與相關常數（請確保 .env 檔案有對應變數 VITE_OPENAI_API_KEY) */
+const apiKey = import.meta.env.VITE_OPENAI_API_KEY || 'sk-你的金鑰請在.env設置'
+const usageLimit = 100 // 假設每日或每小時上限為 100 次呼叫，你可以依需求調整
+const tokenWarningThreshold = 2000 // 當總 token 數超過 2000 則提醒，這是個參考值
+
+// 於 localStorage 中記錄草稿與 API 使用次數
+const drafts = ref([])
+const draftInput = ref('')
+const apiUsageCount = ref(parseInt(localStorage.getItem('apiUsageCount') || '0', 10))
+const totalToken = ref(parseInt(localStorage.getItem('totalToken') || '0', 10))
+const tokenUsageWarning = ref(false)
+
+// 用於產生獨一無二 id
+const generateId = () => '_' + Math.random().toString(36).substr(2, 9)
+
+// 讀取 localStorage 中的草稿
+function loadDrafts() {
+  const stored = localStorage.getItem('drafts')
+  if (stored) {
+    drafts.value = JSON.parse(stored)
+  }
+}
+
+// 儲存草稿
+function saveDraft() {
+  if (!draftInput.value.trim()) return
+  const newDraft = {
+    id: generateId(),
+    content: draftInput.value.trim(),
+    unlockDate: Date.now() + 5 * 60 * 1000, // 5 分鐘後
+    title: '',
+    response: '',
+    error: ''
+  }
+  drafts.value.push(newDraft)
+  localStorage.setItem('drafts', JSON.stringify(drafts.value))
+  draftInput.value = ''
+}
+
+// 格式化日期 (若有無效日期則回傳空字串)
+function formatDate(timestamp) {
+  const date = new Date(timestamp)
+  return isNaN(date.getTime()) ? '' : date.toLocaleString()
+}
+
+// 基本的 token 計算函式 (近似以字數計算，每個單詞約作 1 個 token)
+function countTokens(text) {
+  return text.split(/\s+/).length
+}
+
+// Echo 按鈕處理：遍歷所有滿足條件的草稿後呼叫 API
+async function handleEcho() {
+  // 先檢查使用次數限制
+  if (apiUsageCount.value >= usageLimit) {
+    alert('你今天超過限制了，請稍後再試')
+    return
+  }
+
+  // 找出所有解鎖且未回應的草稿
+  const pendingDrafts = drafts.value.filter(
+    entry => Date.now() >= entry.unlockDate && !entry.response && !entry.error
+  )
+  if (pendingDrafts.length === 0) {
+    alert('目前無可回應的草稿')
+    return
+  }
+
+  // 對於每一筆草稿呼叫 API (在此示範做逐筆呼叫，也可以調整為批次處理)
+  for (const entry of pendingDrafts) {
+    // 根據草稿內容組成 prompt
+    const prompt = `你是 Echo AI，一位充滿創意挑戰精神的反思夥伴，請你針對以下 idea 提出「延伸問題」、「爭議角度」、「實例對比」等深度回應，引導用戶重新思考：
+
+用戶的想法是：「${entry.content}」
+
+請從以下三個角度給出詳細回應：
+1. 問題再定義：這個想法背後有沒有沒被說出的預設？
+2. 立場挑戰：從相反立場或冷門觀點挑戰它。
+3. 延伸發想：如果把這個想法推進一步，會變成什麼？
+包括但不限於：挑戰假設、反向觀點、潛在風險、延伸推論、歷史文化參照、跨領域聯想等。請不要附帶「這是一篇什麼」的導語，而是直接輸出結果。
+
+最後，提出一個符合輸入以用戶想法的標題為開頭，（標題為十個字以內），以此標題寫一篇你兩千字以上的深入分析，並可以輔佐列點分析。
+
+請用自然語氣、具啟發性。`
+
+
+請使用自然口吻、能激發創意、鼓勵思考。`
+
+    // 近似 token 計算並累加（此處以 word 數為近似估算）
+    const promptTokens = countTokens(prompt)
+    totalToken.value += promptTokens
+    localStorage.setItem('totalToken', totalToken.value)
+    if (totalToken.value > tokenWarningThreshold) {
+      tokenUsageWarning.value = true
+    }
+
+    try {
+      const res = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo', // 未來可替換成 GPT-4
+          messages: [{ role: 'user', content: prompt }]
+        })
+      })
+
+      // 增加 API 使用次數計數
+      apiUsageCount.value++
+      localStorage.setItem('apiUsageCount', apiUsageCount.value)
+
+      // 根據狀態碼做錯誤處理
+      if (!res.ok) {
+        const data = await res.json()
+        entry.error = `Echo 回應失敗（${res.status}）`
+        console.error('API Error:', res.status, data.error?.message)
+      } else {
+        const data = await res.json()
+        // 以換行分離回應內容：第一行為摘要，其他為內容
+        const reply = data.choices[0].message.content.trim()
+        const lines = reply.split(/\r?\n/)
+        let title = ''
+        let content = ''
+        // 假設摘要標題行是以 "標題：" 起始
+        if (lines[0].startsWith('標題：')) {
+          title = lines[0].replace(/^標題：/, '').trim().slice(0, 10)
+          content = lines.slice(1).join('\n').trim()
+        } else {
+          // 如果不符合則直接取第一行作為標題
+          title = lines[0].trim().slice(0, 10)
+          content = lines.slice(1).join('\n').trim()
+        }
+        entry.title = title
+        entry.response = content
+      }
+    } catch (err) {
+      entry.error = 'Echo 呼應失敗（網路錯誤）'
+      console.error('Fetch Error:', err)
+    }
+    // 更新 localStorage 中的草稿記錄
+    localStorage.setItem('drafts', JSON.stringify(drafts.value))
+  }
+}
+
+onMounted(() => {
+  loadDrafts()
+})
+</script>
+
+<style>
+/* 如需要，可以進一步調整樣式 */
+</style>
