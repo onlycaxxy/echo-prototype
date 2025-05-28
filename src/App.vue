@@ -1,137 +1,247 @@
 <template>
-  <main class="app-container">
-    <!-- 輸入區 -->
-    <section class="input-section">
-      <textarea v-model="draftInput" placeholder="輸入你的想法..."></textarea>
-      <button @click="handleEcho">Echo AI</button>
-      <button @click="saveDraft">儲存草稿</button>
-    </section>
-
-    <!-- 解鎖等待時間設定 -->
-    <div class="flex items-center space-x-2">
-      <label for="unlockTime">幾分鐘後解鎖：</label>
-      <input
-        id="unlockTime"
-        type="number"
-        min="1"
-        v-model.number="unlockInMinutes"
-        class="border rounded p-1 w-16"
-      />
-      <span>分鐘</span>
-    </div>
-
-    <!-- 草稿區 -->
-    <section class="drafts">
-      <h2>草稿列表</h2>
-      <ul>
-        <li v-for="(entry, index) in drafts" :key="entry.id ?? index">
-          <div v-if="entry.unlockDate && entry.unlockDate > Date.now()">
-          <p>內容：⏳ awaiting..ZzZ</p>
-          <p>unlock time:{{ formatTime(entry.unlockDate) }}</p>
-          <p>time remain:{{ countdown(entry.unlockDate) }}</p>
+  <div class="min-h-screen bg-yellow-50 font-serif">
+    <header class="dashboard-header bg-amber-100 border-b-2 border-yellow-300 px-6 py-4 shadow-sm">
+      <div class="flex items-center justify-between max-w-4xl mx-auto">
+        <div class="site-branding flex items-center space-x-3">
+          <div class="site-avatar w-12 h-12 bg-amber-200 rounded-full border-2 border-yellow-400 p-1">
+            <img src="./assets/avatar.svg" alt="Profile" class="w-full h-full rounded-full" />
           </div>
-          <div v-else>
-          <div class="content">✏️ {{ entry.content }}</div>
-
-          <div class="response" v-if="entry.response" v-html="marked(entry.response)"></div> 
-          <p v-if="entry.error" style="color: red;">⚠️ 錯誤：{{ entry.error }}</p>
+          <div>
+            <h1 class="text-2xl font-bold text-amber-900 tracking-wide">Echo</h1>
+            <p class="text-sm text-amber-700 italic">Personal reflections & thoughts</p>
           </div>
-        </li>
-      </ul>
-     <pre>{{ JSON.stringify(drafts, null, 2) }}</pre>
-    </section>
-  </main>
-</template>
+        </div>
+        
+        <div class="header-stats hidden  md:flex space-x-4 text-amber-800">
+          <div class="stat-pill bg-yellow-200 px-3 py-1 rounded-full border border-yellow-400">
+            <span class="text-xs font-medium">Posts: {{ entries.length }}</span>
+          </div>
+          <div class="stat-pill bg-yellow-200 px-3 py-1 rounded-full border border-yellow-400">
+            <span class="text-xs font-medium">Locked: {{ lockedPosts }}</span>
+          </div>
+        </div>
+      </div>
+    </header>
+             
+    <main class="main-content-area max-w-4xl mx-auto p-4 space-y-6">
+      <section class="notebook-entry-composer bg-amber-50 border-2 border-yellow-300 rounded-lg p-6 shadow-md">
+        <div class="entry-header flex items-center space-x-3 mb-4">
+          <div class="writer-avatar w-10 h-10 bg-yellow-200 rounded-full border border-yellow-400 p-1">
+            <img src="./assets/avatar.svg" alt="Writer" class="w-full h-full rounded-full" />
+          </div>
+          <div>
+            <h3 class="text-lg font-semibold text-amber-900">New notebook Entry</h3>
+            <p class="text-sm text-amber-700">{{ new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }) }}</p>
+          </div>
+        </div>
+      </section>
+        
+        <div class="writing-area mb-4">
+          <textarea 
+            v-model="draftInput"
+            placeholder="Echo your thinking with texture at the heart of it all."
+            class="w-full h-32 p-4 bg-yellow-50 border-2 border-yellow-300 rounded-lg text-amber-900 placeholder-amber-600 font-serif leading-relaxed resize-none focus:outline-none focus:border-yellow-500 focus:bg-white"
+            style="background-image: repeating-linear-gradient(transparent, transparent 23px, #fbbf24 24px);"
+          ></textarea>
+        </div>
+        
+        <div class="entry-controls flex flex-wrap gap-3 items-center">
+          <div class="time-lock-setting flex items-center space-x-2 bg-yellow-100 px-3 py-2 rounded-full border border-yellow-400">
+            <label for="unlockTime" class="text-xs font-medium text-amber-800"> Unlock in:</label>
+            <input 
+              id="unlockTime" 
+              type="number" 
+              min="1" 
+              v-model.number="unlockInMinutes"
+              class="w-12 text-center bg-transparent text-amber-900 font-semibold focus:outline-none"
+            />
+            <span class="text-xs text-amber-700">min</span>
+          </div>
+          
+          <button 
+            @click="saveNewEntry"
+            class="action-btn bg-amber-200 hover:bg-amber-300 text-amber-900 px-4 py-2 rounded-lg border-2 border-yellow-400 font-medium transition-colors shadow-sm"
+          >
+             Echo
+          </button>
+          
 
+        </div>
+      
+      
+      <section class="notebook-entries-feed">
+        <div class="feed-header mb-6">
+          <h2 class="text-xl font-bold text-amber-900 border-b-2 border-yellow-300 pb-2 inline-block">
+             notebook Entries
+          </h2>
+          <p class="text-sm text-amber-700 mt-1">Your personal reflection timeline</p>
+        </div>
+
+        <div class="entries-list space-y-4">
+          <div v-if="entries.length === 0" class="empty-state text-center py-12 bg-yellow-50 border-2 border-yellow-300 rounded-lg p-5 shadow-md">
+            <div class="empty-illustration text-6xl mb-4"></div>
+            <h3 class="text-lg font-semibold text-amber-900 mb-2">No entries yet</h3>
+            <p class="text-amber-700">Start your first notebook entry above!</p>
+          </div>
+          
+          <template v-else>
+            <article
+              v-for="entry in entries"
+              :key="entry.id" 
+              :class="[
+                'notebook-entry bg-yellow-50 border-2 border-yellow-300 rounded-lg p-5 shadow-md hover:shadow-lg transition-shadow',
+                { 'opacity-75 border-dashed': isEntryLocked(entry.unlockDate) }
+              ]"
+            >
+              <div class="entry-meta flex items-start justify-between mb-3">
+                <div class="entry-info flex items-center space-x-3">
+                  <div class="entry-avatar w-8 h-8 bg-amber-200 rounded-full border border-yellow-400 p-1">
+                    <img src="./assets/avatar.svg" alt="Author" class="w-full h-full rounded-full" />
+                  </div>
+                  <div>
+                    <h4 class="font-semibold text-amber-900">{{ entry.title || 'Untitled Entry' }}</h4>
+                    <time class="text-xs text-amber-700">{{ new Date(entry.createdAt).toLocaleDateString() }}</time>
+                  </div>
+                </div>
+                
+                <div v-if="isEntryLocked(entry.unlockDate)" class="lock-status text-xs text-amber-600 bg-yellow-200 px-2 py-1 rounded-full border border-yellow-400">
+                  <span class="mr-1">🔒</span> Locked
+                </div>
+              </div>
+
+              <div class="entry-content">
+                <div v-if="isEntryLocked(entry.unlockDate)" class="locked-preview text-amber-700">
+                  <p class="italic">This entry will unlock soon...</p>
+                  <p v-if="entry.unlockDate" class="text-xs mt-1">Available at: {{ new Date(entry.unlockDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) }}</p>
+                </div>
+
+                <div v-else class="unlocked-content space-y-3">
+                  <div class="original-thought bg-yellow-100 p-3 rounded border border-yellow-300">
+                    <p class="text-amber-900 font-serif leading-relaxed">{{ entry.content }}</p>
+                  </div>
+                  <div v-if="entry.response" class="ai-response bg-amber-100 p-3 rounded border-l-4 border-yellow-500 mt-3">
+                    <div class="response-header mb-2">
+                      <span class="text-xs font-medium text-amber-800 bg-yellow-200 px-2 py-1 rounded">Echo's Reflection</span>
+                    </div>
+                    <div class="response-content text-amber-900 prose prose-amber prose-sm" v-html="markedContent(entry.response)"></div>
+                  </div>
+                  <div v-if="entry.error" class="error-message bg-red-100 border border-red-300 text-red-800 p-3 rounded mt-3">
+                    <p class="text-sm">⚠️ {{ entry.error }}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div class="entry-timestamp text-xs text-amber-600 mt-4 pt-2 border-t border-yellow-200"> 
+                Created: {{ new Date(entry.createdAt).toLocaleString() }}
+              </div>
+            </article>
+          </template>
+        </div>
+      </section>
+    </main>
 
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount } from 'vue'
-import { marked } from 'marked'
-marked.setOptions({ breaks: true })
+import { ref, computed, onMounted, onBeforeUnmount, type Ref } from 'vue';
+import { marked } from 'marked';
 
-// 設定 API 金鑰與相關常數
-const apiKey = import.meta.env.VITE_OPENAI_API_KEY || 'sk-你的金鑰請在.env設置'
-const usageLimit = 100
-const tokenWarningThreshold = 2000
+// Types
+interface Entry {
+  id: string;
+  content: string;
+  createdAt: number;
+  unlockDate: number | null;
+  title?: string;
+  response?: string;
+  error?: string;
+}
 
-// 狀態變數
-const drafts = ref<any[]>([])
-const draftInput = ref('')
-const apiUsageCount = ref(parseInt(localStorage.getItem('apiUsageCount') || '0', 10))
-const totalToken = ref(parseInt(localStorage.getItem('totalToken') || '0', 10))
-const tokenUsageWarning = ref(false)
-const unlockInMinutes = ref(1) // 預設為 1 分鐘後解鎖
-const promptTokens = ref([])
+interface PromptTokenInfo {
+  id: string;
+  tokenCount: number;
+}
 
-const entry = ref<any>({})
-const prompt = ref('')
-let echoInterval: ReturnType<typeof setInterval> | null = null
-let isHandling = false
+// State
+const entries: Ref<Entry[]> = ref([]);
+const currentTime: Ref<number> = ref(Date.now());
+const draftInput = ref('');
+const apiUsageCount = ref(parseInt(localStorage.getItem('apiUsageCount') || '0', 10));
+const totalToken = ref(parseInt(localStorage.getItem('totalToken') || '0', 10));
+const tokenUsageWarning = ref(false);
+const unlockInMinutes = ref(1);
+const promptTokens: Ref<PromptTokenInfo[]> = ref([]);
 
-Object.assign(entry.value, { response: '' })
+// Computed
+const lockedPosts = computed(() => {
+  return entries.value.filter(entry => isEntryLocked(entry.unlockDate)).length;
+});
+
+// Time management
+const isEntryLocked = (unlockDate: number | null): boolean => {
+  return Boolean(unlockDate && unlockDate > currentTime.value);
+};
+
+let timeUpdateInterval: number;
 
 onMounted(() => {
-  echoInterval = setInterval(() => {
-    handleEcho()
-  }, 60000)
-
-  // 預設進來也執行一次
-  handleEcho()
-})
+  loadEntries();
+  timeUpdateInterval = window.setInterval(() => {
+    currentTime.value = Date.now();
+  }, 1000);
+});
 
 onBeforeUnmount(() => {
-  if (echoInterval) {
-    clearInterval(echoInterval)
-    console.log('Component unmounting, echo interval cleared.')
+  if (timeUpdateInterval) {
+    clearInterval(timeUpdateInterval);
   }
-})
+});
 
+// Helper functions
 function countTokens(text: string): number {
-  return text.split(/\s+/).length
-}
-function formatTime(t: number) {
-  const date = new Date(t)
-  return date.toLocaleTimeString()
-}
-function countdown(t: number) {
-  const now = Date.now()
-  const diff = Math.max(0, t - now)
-  const mins = Math.floor(diff / 60000)
-  const secs = Math.floor((diff % 60000) / 1000)
-  return `${mins} 分 ${secs} 秒`
-}
-function generateId() {
-  return '_' + Math.random().toString(36).substr(2, 9)
+  return text.split(/\s+/).length;
 }
 
-// 載入草稿
-function loadDrafts() {
-  const stored = localStorage.getItem('drafts')
+function generateId(): string {
+  return '_' + Math.random().toString(36).substr(2, 9);
+}
 
-  drafts.value.push({
-  content: '測試草稿',
-  createdAt: Date.now(),
-  unlockAt: Date.now() + 60_000,
-  response: null, 
- })
-  console.log("🌱 Loaded drafts:", drafts.value)
-
+// Entry management
+function loadEntries(): void {
+  const stored = localStorage.getItem('entries');
   if (stored) {
     try {
-      drafts.value = JSON.parse(stored)
+      const parsedEntries = JSON.parse(stored) as Entry[];
+      entries.value = parsedEntries.map(e => ({
+        id: e.id || generateId(),
+        content: e.content,
+        createdAt: e.createdAt || Date.now(),
+        unlockDate: e.unlockDate ?? null,
+        title: e.title,
+        response: e.response,
+        error: e.error,
+      }));
     } catch (e) {
-      console.error('Failed to parse drafts from localStorage', e)
-      localStorage.removeItem('drafts')
-      drafts.value = []
+      console.error('Failed to parse entries from localStorage', e);
+      localStorage.removeItem('entries');
+      entries.value = [];
     }
+  }
+  
+  if (entries.value.length === 0) {
+    entries.value.push({
+      id: generateId(),
+      content: 'hi, this is echo, here is where you can echo your thoughts.',
+      createdAt: Date.now(),
+      unlockDate: Date.now() + 60_000,
+      title: 'Welcome',
+    });
   }
 }
 
-// 儲存草稿
-function saveDraft() {
-  if (!draftInput.value.trim()) return
-  const now = Date.now()
-  drafts.value.push({
+function saveNewEntry(): void {
+  if (!draftInput.value.trim()) return;
+  
+  const now = Date.now();
+  entries.value.unshift({
     id: generateId(),
     content: draftInput.value.trim(),
     createdAt: now,
@@ -139,25 +249,87 @@ function saveDraft() {
     title: '',
     response: '',
     error: ''
-  })
-  localStorage.setItem('drafts', JSON.stringify(drafts.value))
-  draftInput.value = ''
+  });
+  
+  localStorage.setItem('entries', JSON.stringify(entries.value));
+  draftInput.value = '';
 }
 
-// 一個任務工人一隻信鴿送信，專門去幫你「把草稿送出去給 OpenAI 的 API，然後把結果拿回來」
-async function fetchEcho(entry: any, prompt: string): Promise<string> {
-  const tokenCount = countTokens(prompt)
-  totalToken.value += tokenCount
-  localStorage.setItem('totalToken', totalToken.value.toString())
-promptTokens.value.push({ id: entry.id, tokenCount })
+// Markdown processing
+const markedContent = (text: string): string => {
+  return text ? marked(text) : '';
+};
 
+// API configuration
+const apiKey = import.meta.env.VITE_OPENAI_API_KEY || 'sk-你的金鑰請在.env設置';
+const usageLimit = 100;
+const tokenWarningThreshold = 2000;
+
+// State variables
+const drafts = ref<any[]>([]);
+// const tokenUsageWarning = ref(false); // Already declared above
+
+// Draft management functions
+function loadDrafts() {
+  const stored = localStorage.getItem('drafts');
+
+  if (stored) {
+    try {
+      drafts.value = JSON.parse(stored);
+    } catch (e) {
+      console.error('Failed to parse drafts from localStorage', e);
+      localStorage.removeItem('drafts');
+      drafts.value = [];
+    }
+  }
+  
+  // If no drafts exist, add a sample one
+  if (drafts.value.length === 0) {
+    drafts.value.push({
+      id: generateId(),
+      content: 'hi, this is echo, here is where you will echo your thoughts.',
+      createdAt: Date.now(),
+      unlockDate: Date.now() + 60_000,
+      title: 'Welcome',
+      response: null,
+    });
+  }
+  
+  console.log("🌱 Loaded drafts:", drafts.value);
+}
+
+function saveDraft() {
+  if (!draftInput.value.trim()) return;
+  
+  const now = Date.now();
+  drafts.value.unshift({  // Add to the beginning of the array for newest first
+    id: generateId(),
+    content: draftInput.value.trim(),
+    createdAt: now,
+    unlockDate: now + unlockInMinutes.value * 60 * 1000,
+    title: '',
+    response: '',
+    error: ''
+  });
+  
+  localStorage.setItem('drafts', JSON.stringify(drafts.value));
+  draftInput.value = '';
+}
+
+// Echo AI processing
+async function fetchEcho(entry: Entry, prompt: string): Promise<string> {
+  const tokenCount = countTokens(prompt);
+  totalToken.value += tokenCount;
+  localStorage.setItem('totalToken', totalToken.value.toString());
+  promptTokens.value.push({ id: entry.id, tokenCount });
 
   if (totalToken.value > tokenWarningThreshold) {
-    tokenUsageWarning.value = true
+    tokenUsageWarning.value = true;
   }
 
   try {
-    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', 
+{
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -167,64 +339,64 @@ promptTokens.value.push({ id: entry.id, tokenCount })
         model: 'gpt-3.5-turbo',
         messages: [{ role: 'user', content: prompt }]
       })
-    })
+    });
 
-    apiUsageCount.value++
-    localStorage.setItem('apiUsageCount', apiUsageCount.value.toString())
+    apiUsageCount.value++;
+    localStorage.setItem('apiUsageCount', apiUsageCount.value.toString());
 
-    const data = await res.json()
+    const data = await res.json();
 
     if (!res.ok) {
-    console.error('❌ API Error:', res.status, data)
-    entry.error = `API Error ${res.status}: ${data?.error?.message || 'Unknown error'}`
-    return ''
-  }
+      console.error('❌ API Error:', res.status, data);
+      entry.error = `API Error ${res.status}: ${data?.error?.message || 
+'Unknown error'}`;
+      return '';
+    }
     
-
-  // 拆開openai回信的內容，response json是格式。得到message的content之後，分出標題和內容
-    console.log("✅ OpenAI response data:", data)
-    const reply = data.choices[0].message.content.trim()
-    const lines = reply.split(/\r?\n/)
-    let title = '', content = ''
+    // Parse OpenAI response
+    console.log("✅ OpenAI response data:", data);
+    const reply = data.choices[0].message.content.trim();
+    const lines = reply.split(/\r?\n/);
+    let title = '', content = '';
+    
     if (lines[0].startsWith('標題：')) {
-      title = lines[0].replace(/^標題：/, '').trim().slice(0, 10)
-      content = lines.slice(1).join('\n').trim()
+      title = lines[0].replace(/^標題：/, '').trim().slice(0, 10);
+      content = lines.slice(1).join('\n').trim();
     } else {
-      title = lines[0].trim().slice(0, 10)
-      content = lines.slice(1).join('\n').trim()
+      title = lines[0].trim().slice(0, 10);
+      content = lines.slice(1).join('\n').trim();
     }
 
-    entry.title = title
-    entry.response = content
-    entry.error = ''
-    return content
+    entry.title = title;
+    entry.response = content;
+    entry.error = '';
+    return content;
 
   } catch (err: any) {
-    console.error('❌ Echo 錯誤：', err.message)
-    entry.error = err.message || 'Echo 呼應失敗（網路錯誤）'
-    return ''
+    console.error('❌ Echo 錯誤：', err.message);
+    entry.error = err.message || 'Echo 呼應失敗（網路錯誤）';
+    return '';
   }
 }
 
-// 這是「指揮官」，負責叫那隻信鴿（fetchEcho）出去。
 async function handleEcho() {
   if (apiUsageCount.value >= usageLimit) {
-    console.warn('API usage limit reached.')
-    alert('你今天超過限制了，請稍後再試')
-    return
+    console.warn('API usage limit reached.');
+    alert('You have reached your daily limit for AI responses. Please try again tomorrow.');
+    return;
   }
 
+  // Find drafts eligible for processing (unlocked and no response yet)
+  const pendingEntries = entries.value.filter(
+    entry => entry.unlockDate !== null && currentTime.value >= entry.unlockDate && !entry.response && !entry.error
+  );
 
-// 從草稿中找可以送出去的草稿，
-  const pendingDrafts = drafts.value.filter(
-    entry => Date.now() >= entry.unlockDate && !entry.response && !entry.error
-  )
-  if (pendingDrafts.length === 0) {
-    console.log('目前無可回應的草稿')
-    return
+  if (pendingEntries.length === 0) {
+    console.log('No entries ready for processing'); // Updated log
+    return;
   }
 
-  for (const entry of pendingDrafts) {
+  for (const entry of pendingEntries) {
     const prompt = `你是 Echo AI，一位富有創意與挑戰精神的反思夥伴。
 
 請針對以下用戶想法提出三種深入分析：
@@ -234,54 +406,109 @@ async function handleEcho() {
 
 用戶的想法是：「${entry.content}」
 
-最後，寫一個十字內的標題，並針對這個標題撰寫一篇一千字以上的深入分析，請用 Markdown 格式（搭配 H3 標題、列表、粗體字）輸出回應。自然語氣。`
+最後，寫一個十字內的標題，並針對這個標題撰寫一篇一千字以上的深入分析，請用 
+Markdown 格式（搭配 H3 標題、列表、粗體字）輸出回應。自然語氣。`;
 
-  
-    const response = await fetchEcho(entry, prompt)
-    entry.response = response 
-    drafts.value = [...drafts.value]
-    localStorage.setItem('drafts', JSON.stringify(drafts.value))
-    console.log('🚀 Sending to OpenAI:', prompt)
-    const currentPromptTokenCount = countTokens(prompt);
-    console.log('🎯 回應結果寫入草稿：', entry.response)
-    console.log('📏 Token count:', currentPromptTokenCount);
+    const response = await fetchEcho(entry, prompt);
+    entry.response = response;
+    // drafts.value = [...drafts.value]; // Trigger reactivity // 'drafts' is not used in App.vue, so this line can be removed to prevent potential issues.
+    localStorage.setItem('entries', JSON.stringify(entries.value)); // Corrected to 'entries'
+    console.log('🚀 Sent to OpenAI:', prompt);
+    console.log('🎯 Response saved to entry:', entry.response); // Corrected log
   }
 }
 
+// Initial calls for drafts - you might want to call loadEntries() instead if 'entries' is the main data source
+onMounted(() => {
+  loadEntries(); // Make sure entries are loaded
+  loadDrafts(); // If 'drafts' are still relevant for some reason, keep this
+  handleEcho(); // Process any pending entries on mount
+});
 
+// Added a watcher to trigger handleEcho when currentTime updates and an entry becomes unlocked
+// This is an alternative to having handleEcho run on an interval,
+// but can be less efficient if you have many entries changing state frequently.
+// A simpler approach might be to just call handleEcho on an interval or on user action.
+// For now, removing watch and relying on interval/manual trigger.
+// If you want continuous processing, consider setting up a dedicated interval for handleEcho.
 
 
 </script>
 
-
-<style scoped>
-.response {
-  background-color: #f9f9fc;
-  border-left: 4px solid #6699ff;
-  padding: 1rem;
-  border-radius: 0.75rem;
-  font-family: 'Noto Sans TC', sans-serif;
-  font-size: 1rem;
-  margin-top: 1rem;
-  line-height: 1.8;
+<style>
+/* Sidebar Styles */
+.sidebar-nav {
+  margin-bottom: 24px;
 }
 
-.response :deep(p) {
-  margin: 0.75rem 0;
+.nav-links {
+  list-style: none;
+  padding: 0;
+  margin: 0;
 }
-.response :deep(h1),
-.response :deep(h2),
-.response :deep(h3),
-.response :deep(h4) {
-  font-weight: bold;
-  margin-top: 1rem;
-  color: #333;
+
+.nav-item {
+  margin-bottom: 8px;
 }
-.response :deep(ul) {
-  list-style: disc;
-  padding-left: 1.5rem;
+
+.nav-link {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  border-radius: 6px;
+  color: var(--text-color);
+  text-decoration: none;
+  transition: background-color 0.2s;
 }
-.response :deep(li) {
-  margin-bottom: 0.5rem;
+
+.nav-link:hover {
+  background-color: #f0f0f0;
+}
+
+.nav-item.active .nav-link {
+  background-color: #f0eeff;
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.nav-icon {
+  margin-right: 12px;
+  font-size: 18px;
+}
+
+.section-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: var(--text-color);
+}
+
+.stats-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.stat-item {
+  background-color: #f8f8f8;
+  border-radius: 8px;
+  padding: 12px;
+  flex: 1;
+  min-width: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--primary-color);
+}
+
+.stat-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 4px;
 }
 </style>
